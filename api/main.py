@@ -92,3 +92,82 @@ def score_transaction(transaction: Transaction):
         "fraud_score": fraud_score,
         "is_flagged": is_flagged
     }
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/login")
+def login(credentials: LoginRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT * FROM users WHERE email = %s", (credentials.email,))
+    user = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    if not user:
+        return {"success": False, "message": "User not found"}
+
+    if not pwd_context.verify(credentials.password, user["password_hash"]):
+        return {"success": False, "message": "Incorrect password"}
+
+    return {
+        "success": True,
+        "user_id": user["user_id"],
+        "name": user["name"],
+        "role": user["role"]
+    }
+@app.get("/flagged-cases")
+def get_flagged_cases():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT fc.case_id, fc.transaction_id, fc.reason, fc.status, fc.created_at,
+               t.amount, t.fraud_score
+        FROM flagged_cases fc
+        JOIN transactions t ON fc.transaction_id = t.transaction_id
+        ORDER BY fc.created_at DESC
+    """)
+    cases = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return cases
+
+
+class ActionRequest(BaseModel):
+    case_id: int
+    user_id: int
+    decision: str  # "approved" or "rejected"
+    notes: str = ""
+
+@app.post("/investigator-action")
+def investigator_action(action: ActionRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Log the investigator's decision
+    cursor.execute(
+        "INSERT INTO investigator_actions (case_id, user_id, decision, notes) VALUES (%s, %s, %s, %s)",
+        (action.case_id, action.user_id, action.decision, action.notes)
+    )
+
+    # Update the case status too
+    cursor.execute(
+        "UPDATE flagged_cases SET status = %s WHERE case_id = %s",
+        (action.decision, action.case_id)
+    )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return {"success": True, "message": f"Case {action.case_id} marked as {action.decision}"}
