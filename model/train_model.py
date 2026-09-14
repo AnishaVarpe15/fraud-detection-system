@@ -29,3 +29,8 @@ print("Confusion Matrix:")
 print(confusion_matrix(y_test, y_pred))
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
+
+import joblib
+
+joblib.dump(model, "fraud_model.pkl")
+print("✅ Model saved as fraud_model.pkl")
