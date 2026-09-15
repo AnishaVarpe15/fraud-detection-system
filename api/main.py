@@ -6,9 +6,21 @@ from dotenv import load_dotenv
 import os
 import pandas as pd
 
-load_dotenv()
+
 
 app = FastAPI()
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+load_dotenv()
 
 # Load the trained model once, when the server starts
 model = joblib.load("../model/fraud_model.pkl")
